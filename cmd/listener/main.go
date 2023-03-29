@@ -2,28 +2,24 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"math/big"
 	"os"
-	"strings"
 
+	"github.com/arbitunities/abstract-listener/internal/argparser"
+	"github.com/arbitunities/abstract-listener/internal/logger"
 	"github.com/arbitunities/abstract-listener/pkg/config"
 	"github.com/arbitunities/abstract-listener/pkg/listener"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/rs/zerolog"
-)
-
-var (
-	entryPointAddress    = common.HexToAddress("0x0576a174D229E3cFA37253523E645A78A0C91B57")
-	simpleAccountFactory = common.HexToAddress("0x71D63edCdA95C61D6235552b5Bc74E32d8e2527B")
-	addresses            = []common.Address{entryPointAddress, simpleAccountFactory}
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	godotenv.Load(".env")
+
 	topics := [][]common.Hash{}
 	for _, event := range []string{
 		"UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)",
@@ -36,16 +32,15 @@ func main() {
 		})
 	}
 
-	config := config.NewConfig()
 	// Go Ethererum light client connection
-	client, err := ethclient.Dial(config.Rpc)
+	client, err := ethclient.Dial(os.Getenv("RPC"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed create client %s\n", err)
 		os.Exit(1)
 	}
 
 	if err := run(client, ethereum.FilterQuery{
-		Addresses: addresses,
+		Addresses: []common.Address{config.EntryPointAddress},
 		Topics:    topics,
 		FromBlock: big.NewInt(16912244),
 	}); err != nil {
@@ -55,19 +50,20 @@ func main() {
 }
 
 func run(client *ethclient.Client, filterQuery ethereum.FilterQuery) error {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	logger := zerolog.New(os.Stdout)
+	// parse flags
+	debug, from, to := argparser.ParseFlags()
 
-	debug := flag.Bool("debug", false, "Debug log level ")
-	flag.Parse()
+	// setup logger
+	logger := logger.NewLogger(debug)
 
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	if *debug || (strings.ToUpper(os.Getenv("LOG_LEVEL")) == "DEBUG") {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	}
-
+	// setup listener
 	lol := listener.NewListener(client)
-	txs, err := lol.GetAddressTransactions(context.Background(), &entryPointAddress, int(16903038), int(16903038))
+	txs, err := lol.GetAddressTransactions(
+		context.Background(),
+		&config.EntryPointAddress,
+		big.NewInt(*from),
+		big.NewInt(*to),
+	)
 
 	if err != nil {
 		return err

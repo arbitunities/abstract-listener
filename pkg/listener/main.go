@@ -35,11 +35,14 @@ func (l *Listener) FilterLogs(ctx context.Context, filter ethereum.FilterQuery) 
 func (l *Listener) GetAddressTransactions(
 	ctx context.Context,
 	filter *common.Address,
-	fromBlock, toBlock int,
+	fromBlock, toBlock *big.Int,
 ) (txs []*ParsedTransaction, err error) {
 	// txs := []*types.Receipt{}
-	for i := fromBlock; i <= int(toBlock); i++ {
-		fmt.Println(i)
+	from := fromBlock.Int64()
+	to := toBlock.Int64()
+
+	for i := from; i <= to; i++ {
+		fmt.Printf("block: %d\n", i)
 		block, err := l.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
 		if err != nil {
 			return nil, err
